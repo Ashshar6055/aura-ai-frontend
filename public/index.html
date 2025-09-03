@@ -7,8 +7,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     <style>
-        body { font-family: 'Inter', sans-serif; }
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
         #chat-log::-webkit-scrollbar { width: 4px; }
         #chat-log::-webkit-scrollbar-thumb { background-color: #4A5568; border-radius: 20px; }
         .fade-in { animation: fadeIn 0.5s ease-in-out forwards; }
@@ -95,7 +95,8 @@
         // --- GLOBAL STATE ---
         let currentEmotion = 'Neutral';
         let isSpeakModeEnabled = false;
-        const backendUrl = 'http://127.0.0.1:5000';
+        // THE ONLY CHANGE IS ON THIS LINE: Using the live Render URL
+        const backendUrl = 'https://aura-ai-backend-1.onrender.com';
         const roboticPhrases = {
             'Happy': "Analysis: Zygomaticus major activity detected. Probability of positive sentiment: 92%.",
             'Sad': "Processing... Corrugator supercilii contraction indicates negative valence. User state: Subdued.",
@@ -120,7 +121,6 @@
                 
                 // Step 2: Load the face detection models for the frontend
                 loadingText.textContent = 'Loading face detection models...';
-                // THE ONLY CHANGE IS ON THIS LINE: Using '/models' instead of './models'
                 await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
                 
                 // Step 3: Request webcam access
@@ -142,7 +142,6 @@
                 loadingScreen.querySelector('.spinner').style.display = 'none';
             }
         }
-
 
         // --- CORE FUNCTIONS ---
         function speak(text) {
