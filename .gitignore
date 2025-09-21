@@ -1,0 +1,11 @@
+Firebase Hosting cache and logs
+.firebase/
+firebase-debug.log
+
+Mac and Windows system files
+.DS_Store
+Thumbs.db
+
+If you ever use Node.js for more advanced tools
+node_modules/
+.npm/

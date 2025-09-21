@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aura AI Companion</title>
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+    <!-- Using the reliable Tailwind CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-image: radial-gradient(circle at top left, rgba(56, 189, 248, 0.1), transparent 30%), radial-gradient(circle at bottom right, rgba(20, 83, 45, 0.15), transparent 40%);
+        }
+        #chat-log::-webkit-scrollbar { width: 6px; }
+        #chat-log::-webkit-scrollbar-thumb { background-color: #475569; border-radius: 3px; }
+        #chat-log::-webkit-scrollbar-track { background: transparent; }
+
+        .fade-in { animation: fadeIn 0.5s ease-in-out forwards; }
+        .fade-out { animation: fadeOut 0.5s ease-in-out forwards; visibility: hidden; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+        
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            border-top: 4px solid #2dd4bf; /* Teal accent color */
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .icon-button { cursor: pointer; transition: color 0.2s; }
+        .icon-button:hover { color: #5eead4; } 
+        .mic-button.is-listening { color: #f87171; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+        .speak-button.active { color: #2dd4bf; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-300 flex flex-col h-screen">
+
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center z-50 transition-opacity duration-500">
+        <div class="spinner"></div>
+        <p id="loading-text" class="mt-4 text-lg text-slate-400">Initializing Aura AI...</p>
+        <p class="text-sm text-slate-500 mt-2">Please wait, this may take a moment.</p>
+    </div>
+
+    <!-- Main Application -->
+    <div id="app-container" class="flex flex-col h-screen opacity-0" style="visibility: hidden;">
+        <header class="bg-slate-900/70 backdrop-blur-sm p-4 border-b border-slate-700/50">
+            <h1 class="text-xl font-bold text-center text-white">Aura AI Companion</h1>
+        </header>
+
+        <main class="flex-1 flex flex-col md:flex-row p-4 gap-4 overflow-hidden">
+            <!-- Left Panel -->
+            <div class="w-full md:w-1/3 lg:w-1/4 flex flex-col items-center bg-slate-800/50 p-4 rounded-xl border border-slate-700/50 space-y-4">
+                <div class="relative w-full max-w-xs aspect-square rounded-lg overflow-hidden border-2 border-slate-700 shadow-lg">
+                    <video id="webcam" autoplay muted playsinline class="w-full h-full object-cover"></video>
+                    <canvas id="overlay" class="absolute top-0 left-0"></canvas>
+                </div>
+                <div id="status" class="text-center p-3 bg-slate-700/50 rounded-lg w-full max-w-xs border border-slate-600/50">
+                    <p class="text-lg">Current Emotion: <span id="emotion-status" class="font-semibold text-teal-400">...</span></p>
+                </div>
+                <div class="text-left p-3 bg-slate-900 rounded-lg w-full max-w-xs h-24 border border-slate-700/50">
+                    <p class="text-sm font-semibold text-slate-400 mb-1">System Analysis:</p>
+                    <p id="robotic-text" class="text-xs text-slate-300 font-mono">Awaiting facial data stream...</p>
+                </div>
+            </div>
+            <!-- Right Panel -->
+            <div class="flex-1 flex flex-col bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
+                <div id="chat-log" class="flex-1 p-6 space-y-6 overflow-y-auto">
+                    <div class="flex justify-start fade-in">
+                        <div class="max-w-md">
+                            <div class="bg-slate-700 p-3 rounded-2xl rounded-bl-lg shadow-md">
+                                <p class="text-white">Hello! I'm Aura. My systems are online. Whenever you're ready, I'm here to listen.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-4 bg-slate-900/50 border-t border-slate-700/50">
+                    <form id="chat-form" class="flex items-center gap-3">
+                        <div class="relative flex-1">
+                            <input type="text" id="message-input" placeholder="Type your message..." class="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 pr-10 text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500" autocomplete="off" disabled>
+                            <div id="mic-button" class="mic-button icon-button absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M5 3a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0V3z"/><path d="M3.5 6.5A.5.5 0 0 1 4 7v1a4 4 0 0 0 8 0V7a.5.5 0 0 1 1 0v1a5 5 0 0 1-4.5 4.975V15h3a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1h3v-2.025A5 5 0 0 1 3 8V7a.5.5 0 0 1 .5-.5z"/></svg>
+                            </div>
+                        </div>
+                        <button type="submit" id="send-button" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:bg-slate-500 disabled:cursor-not-allowed" disabled>Send</button>
+                        <div id="speak-button" class="speak-button icon-button text-slate-400 p-2 rounded-full hover:bg-slate-700">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16"><path d="M11.536 14.01A8.473 8.473 0 0 0 14.026 8a8.473 8.473 0 0 0-2.49-6.01l-1.414 1.414A6.472 6.472 0 0 1 12.025 8a6.472 6.472 0 0 1-1.903 4.596l1.414 1.414zM10.121 12.596A6.472 6.472 0 0 0 12.025 8a6.472 6.472 0 0 0-1.904-4.596l-1.414 1.414A4.472 4.472 0 0 1 10.025 8a4.472 4.472 0 0 1-1.317 3.182l1.414 1.414zM8.707 11.182A4.472 4.472 0 0 0 10.025 8a4.472 4.472 0 0 0-1.318-3.182L7.293 6.232A2.5 2.5 0 0 1 8.025 8a2.5 2.5 0 0 1-.732 1.768l1.414 1.414zM6 7.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 0 1h-1a.5.5 0 0 1-.5-.5z"/></svg>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // --- DOM ELEMENTS ---
+        const loadingScreen = document.getElementById('loading-screen'), loadingText = document.getElementById('loading-text');
+        const appContainer = document.getElementById('app-container'), video = document.getElementById('webcam');
+        const emotionStatus = document.getElementById('emotion-status'), chatLog = document.getElementById('chat-log');
+        const chatForm = document.getElementById('chat-form'), messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button'), micButton = document.getElementById('mic-button');
+        const speakButton = document.getElementById('speak-button'), roboticText = document.getElementById('robotic-text');
+        const canvas = document.getElementById('overlay');
+
+        // --- GLOBAL STATE ---
+        let currentEmotion = 'Neutral';
+        let isSpeakModeEnabled = false;
+        const backendUrl = 'https://aura-ai-backend-dlcy.onrender.com';
+        const roboticPhrases = {
+            // --- THIS IS THE FIX --- (lowercase to match backend)
+            'happy': "Analysis: Zygomaticus major activity detected. Positive sentiment probability: high.",
+            'sad': "Processing... Corrugator supercilii contraction indicates negative valence.",
+            'angry': "Warning: Orbicularis oculi tension levels high. Anger signature detected.",
+            'surprise': "Facial markers indicate unexpected stimuli. Levator palpebrae superioris activated.",
+            'fear': "Alert: Amygdala response indicators present. Elevated fear markers detected.",
+            'disgust': "Levator labii superioris activated. Disgust signature identified.",
+            'neutral': "System nominal. Facial expression within baseline parameters."
+        };
+
+        // --- BROWSER APIs ---
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition;
+        const speechSynthesis = window.speechSynthesis;
+
+        // --- INITIALIZATION ---
+        async function initialize() {
+            try {
+                loadingText.textContent = 'Connecting to Aura AI server...';
+                await fetch(`${backendUrl}/status`);
+                
+                loadingText.textContent = 'Loading face detection models...';
+                // --- THIS IS THE FIX ---
+                // We load the models from a reliable public CDN instead of a local folder.
+                // This is the most robust solution and removes the need for the 'models' folder.
+                const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+                await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+                
+                loadingText.textContent = 'Requesting webcam access...';
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+
+                video.onloadedmetadata = () => {
+                    loadingScreen.classList.add('fade-out');
+                    appContainer.style.visibility = 'visible';
+                    appContainer.classList.add('fade-in');
+                    setTimeout(() => loadingScreen.style.display = 'none', 500);
+                };
+
+            } catch (err) {
+                console.error("Initialization failed:", err);
+                loadingText.textContent = 'Error: Could not start. Is the backend server running?';
+                loadingScreen.querySelector('.spinner').style.display = 'none';
+            }
+        }
+
+        // --- CORE FUNCTIONS ---
+        function speak(text) {
+            if (!isSpeakModeEnabled || !speechSynthesis) return;
+            speechSynthesis.cancel(); 
+            const utterance = new SpeechSynthesisUtterance(text);
+            speechSynthesis.speak(utterance);
+        }
+
+        async function predictAndTrigger(faceImage) {
+            try {
+                const response = await fetch(`${backendUrl}/predict_and_trigger`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: faceImage })
+                });
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const data = await response.json();
+                
+                if (data.emotion && data.emotion !== currentEmotion) {
+                    currentEmotion = data.emotion;
+                    emotionStatus.textContent = currentEmotion.charAt(0).toUpperCase() + currentEmotion.slice(1);
+                    roboticText.classList.remove('fade-in');
+                    void roboticText.offsetWidth; // Trigger reflow
+                    roboticText.textContent = roboticPhrases[currentEmotion] || "Analyzing...";
+                    roboticText.classList.add('fade-in');
+                }
+
+                if (data.ai_response) {
+                    appendMessage('ai', data.ai_response);
+                    messageInput.disabled = false;
+                    sendButton.disabled = false;
+                    messageInput.focus();
+                }
+            } catch (error) { console.error('Error in predict/trigger:', error); }
+        }
+
+        async function sendChatMessage(message) {
+            appendMessage('user', message);
+            messageInput.value = '';
+            try {
+                const response = await fetch(`${backendUrl}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: message, emotion: currentEmotion })
+                });
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const data = await response.json();
+                appendMessage('ai', data.reply);
+            } catch (error) {
+                console.error('Error sending chat message:', error);
+                appendMessage('ai', 'Sorry, I am having trouble connecting.');
+            }
+        }
+        
+        function appendMessage(sender, text) {
+            const justifyClass = sender === 'user' ? 'justify-end' : 'justify-start';
+            const bubbleClass = sender === 'user' ? 'bg-indigo-600 text-white' : 'bg-gray-700';
+            
+            const messageWrapper = document.createElement('div');
+            messageWrapper.className = `flex ${justifyClass} fade-in`;
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `max-w-md`;
+            
+            messageDiv.innerHTML = `
+                <div class="${bubbleClass} p-3 rounded-2xl ${sender === 'user' ? 'rounded-br-lg' : 'rounded-bl-lg'} shadow-md">
+                    <p>${text.replace(/\n/g, '<br>')}</p>
+                </div>
+            `;
+            messageWrapper.appendChild(messageDiv);
+            chatLog.appendChild(messageWrapper);
+            chatLog.scrollTop = chatLog.scrollHeight;
+            if (sender === 'ai') speak(text);
+        }
+
+        // --- EVENT LISTENERS ---
+        video.addEventListener('play', () => {
+            const displaySize = { width: video.clientWidth, height: video.clientHeight };
+            faceapi.matchDimensions(canvas, displaySize);
+
+            setInterval(async () => {
+                const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions());
+                if (detections.length > 0) {
+                    const face = detections[0].box;
+                    const faceCanvas = document.createElement('canvas');
+                    faceCanvas.width = face.width; faceCanvas.height = face.height;
+                    const faceCtx = faceCanvas.getContext('2d');
+                    faceCtx.drawImage(video, face.x, face.y, face.width, face.height, 0, 0, face.width, face.height);
+                    const faceImageData = faceCanvas.toDataURL('image/jpeg');
+                    predictAndTrigger(faceImageData);
+                }
+            }, 2000);
+        });
+
+        chatForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const message = messageInput.value.trim();
+            if (message) sendChatMessage(message);
+        });
+        
+        speakButton.addEventListener('click', () => {
+            isSpeakModeEnabled = !isSpeakModeEnabled;
+            speakButton.classList.toggle('active', isSpeakModeEnabled);
+            if (isSpeakModeEnabled) {
+                speak("Voice enabled.");
+            } else {
+                speechSynthesis.cancel();
+            }
+        });
+
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = false; recognition.lang = 'en-US';
+            micButton.addEventListener('click', () => {
+                if (micButton.classList.contains('is-listening')) { recognition.stop(); return; }
+                try { recognition.start(); } catch(e) { console.error("Mic could not start: ", e); }
+            });
+            recognition.onstart = () => {
+                micButton.classList.add('is-listening');
+                messageInput.placeholder = "Listening...";
+            }
+            recognition.onresult = (event) => { messageInput.value = event.results[0][0].transcript; };
+            recognition.onerror = (event) => { console.error('Mic error:', event.error); };
+            recognition.onend = () => {
+                micButton.classList.remove('is-listening');
+                messageInput.placeholder = "Type or click the mic to speak...";
+            };
+        } else { micButton.style.display = 'none'; }
+
+        // --- START THE APP ---
+        initialize();
+    </script>
+</body>
+</html>
+
